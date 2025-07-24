@@ -6,6 +6,7 @@ import random
 import os
 import json
 import logging
+import sys
 
 import toml
 from logging.handlers import RotatingFileHandler
@@ -33,8 +34,8 @@ TELEGRAM_CHAT_ID = config["telegram_chat_id"]
 
 
 # 요청 사이 랜덤 지연 범위 (초)
-MIN_DELAY = 1
-MAX_DELAY = 5
+MIN_DELAY = config["min_delay"]
+MAX_DELAY = config["max_delay"]
 
 # 로그 파일 경로
 LOG_PATH = "logs/check_button.log"
@@ -73,28 +74,16 @@ def send_telegram_message(text: str) -> None:
     try:
         resp = requests.post(url, json=payload)
         resp.raise_for_status()
-        logger.info(f"Telegram 알림 전송 성공: {text}")
+        logger.info(f"Telegram 알림 전송 : {text}")
     except Exception as e:
-        logger.error(f"Telegram 알림 전송 실패: {e}")
+        logger.error(f"Telegram 알림 전송 실패 : {e}")
 
 
 # 사용자 에이전트 문자열 목록
 USER_AGENTS = [
-    (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/115.0.0.0 Safari/537.36"
-    ),
-    (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-        "Version/15.1 Safari/605.1.15"
-    ),
-    (
-        "Mozilla/5.0 (X11; Linux x86_64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/114.0.0.0 Safari/537.36"
-    ),
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
 ]
 
 
@@ -124,16 +113,11 @@ def scrape_cartier_watch(url: str) -> ItemInfoResponse:
     Cartier 시계 상세 페이지에서 제품명, 가격, 이미지 URL 목록을 추출하는 함수
     """
     headers = {
-        "Accept": (
-            "text/html,application/xhtml+xml,application/xml;q=0.9,"
-            "image/avif,image/webp,image/apng,*/*;q=0.8"
-        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
         "Cache-Control": "max-age=0",
         "Priority": "u=0,i",
-        "Sec-CH-UA": (
-            ('"Google Chrome";v="137", ' '"Chromium";v="137", ' '"Not/A)Brand";v="24"')
-        ),
+        "Sec-CH-UA": '"Google Chrome";v="137", "Chromium";v="137", "Not/A)Brand";v="24"',
         "Sec-CH-UA-Mobile": "?0",
         "Sec-CH-UA-Platform": '"macOS"',
         "Sec-Fetch-Dest": "empty",
@@ -151,7 +135,25 @@ def scrape_cartier_watch(url: str) -> ItemInfoResponse:
     headers["User-Agent"] = random.choice(USER_AGENTS)
     # 실제 스크래핑 수행 시간 측정
     req_start = time.perf_counter()
-    response = requests.get(url, headers=headers)
+    # 백오프 및 타임아웃 설정
+    MAX_RETRIES = config.get("max_retries", 3)
+    BACKOFF_FACTOR = config.get("backoff_factor", 2)
+    TIMEOUT = config.get("timeout", 3)
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(url, headers=headers, timeout=TIMEOUT)
+            break
+        except requests.exceptions.RequestException as e:
+            logger.warning(
+                f"요청 실패 (시도 {attempt}/{MAX_RETRIES}): {e}\n"
+                f"요청 파라미터: url={url}, timeout={TIMEOUT}\n"
+                f"요청 헤더: {json.dumps(headers, ensure_ascii=False)}"
+            )
+            if attempt == MAX_RETRIES:
+                raise
+            sleep_time = BACKOFF_FACTOR ** (attempt - 1)
+            logger.info(f"{sleep_time}초 후 재시도...")
+            time.sleep(sleep_time)
     req_end = time.perf_counter()
     scrape_time = req_end - req_start
 
@@ -161,12 +163,11 @@ def scrape_cartier_watch(url: str) -> ItemInfoResponse:
 
     # 상품명 추출 (data-product-component="name" 사용)
     title_tag = soup.select_one('h1[data-product-component="name"]')
-    title = title_tag.get_text(strip=True) if title_tag else ""
+    title = title_tag.get_text(strip=True) if title_tag else None
 
     # 가격 추출 (data-product-component="price" 내 value 클래스 이용)
-    price_selector = 'div[data-product-component="price"] span.value'
-    price_tag = soup.select_one(price_selector)
-    price = price_tag.get_text(strip=True) if price_tag else ""
+    price_tag = soup.select_one('div[data-product-component="price"] span.value')
+    price = price_tag.get_text(strip=True) if price_tag else None
 
     # 상담원 연결 버튼 텍스트 확인
     availability_tag = soup.select_one(
@@ -203,27 +204,29 @@ def scrape_cartier_watch(url: str) -> ItemInfoResponse:
 if __name__ == "__main__":
     logger.info("Cartier 시계 구매 가능 상태 확인 시작")
 
-    send_telegram_message("Cartier 시계 재고 확인 작업 시작")
-
     # 대상 URL에서 정보 스크래핑
     url = TARGET_URL
     try:
         info: ItemInfoResponse = scrape_cartier_watch(url)
+        # 구매 가능 상태 확인 후 Telegram 알림
+        if info.is_available_item:
+            message = (
+                f"상품명: {info.title}\n"
+                f"가격: {info.price}\n"
+                "구매 가능 상태: 구매 가능\n"
+                f"URL: {url}"
+            )
+            logger.info("구매 가능 상태 확인, Telegram 알림 전송")
+            send_telegram_message(message)
+        else:
+            logger.info("아직 구매 불가 상태입니다.")
     except Exception as e:
         err_msg = f"스크래핑 오류 발생: {e}"
         logger.error(err_msg, exc_info=True)
         send_telegram_message(err_msg)
-    # 구매 가능 상태 확인 후 Telegram 알림
-    if info.is_available_item:
-        message = (
-            f"상품명: {info.title}\n"
-            f"가격: {info.price}\n"
-            "구매 가능 상태: 구매 가능\n"
-            f"URL: {url}"
-        )
-        logger.info("구매 가능 상태 확인, Telegram 알림 전송")
-        send_telegram_message(message)
+        sys.exit(1)
     else:
-        logger.info("아직 구매 불가 상태입니다.")
-
-    logger.info("Cartier 시계 구매 가능 상태 확인 완료")
+        logger.info("Cartier 시계 정보 스크래핑 완료")
+    finally:
+        logger.info("프로그램 종료")
+        sys.exit(0)
