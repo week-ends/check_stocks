@@ -135,9 +135,9 @@ def scrape_cartier_watch(url: str) -> ItemInfoResponse:
     # 실제 스크래핑 수행 시간 측정
     req_start = time.perf_counter()
     # 백오프 및 타임아웃 설정
-    MAX_RETRIES = config.get("max_retries", 3)
-    BACKOFF_FACTOR = config.get("backoff_factor", 2)
-    TIMEOUT = config.get("timeout", 3)
+    MAX_RETRIES = int(config.get("max_retries", 3))
+    BACKOFF_FACTOR = float(config.get("backoff_factor", 2))
+    TIMEOUT = float(config.get("timeout", 3))
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info(
