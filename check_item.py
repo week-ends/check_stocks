@@ -141,6 +141,9 @@ def scrape_cartier_watch(url: str) -> ItemInfoResponse:
     TIMEOUT = config.get("timeout", 3)
     for attempt in range(1, MAX_RETRIES + 1):
         try:
+            logger.info(
+                f"요청 시도 {attempt}/{MAX_RETRIES}: url={url}, timeout={TIMEOUT}, headers={json.dumps(headers, ensure_ascii=False)}"
+            )
             response = requests.get(url, headers=headers, timeout=TIMEOUT)
             break
         except requests.exceptions.RequestException as e:
