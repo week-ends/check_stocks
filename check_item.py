@@ -224,7 +224,10 @@ if __name__ == "__main__":
         else:
             logger.info("아직 구매 불가 상태입니다.")
     except Exception as e:
-        err_msg = f"스크래핑 오류 발생: {e}"
+        import traceback
+
+        tb_str = traceback.format_exc()
+        err_msg = f"스크래핑 오류 발생: {e}\nTraceback:\n{tb_str}"
         logger.error(err_msg, exc_info=True)
         send_telegram_message(err_msg)
         sys.exit(1)
