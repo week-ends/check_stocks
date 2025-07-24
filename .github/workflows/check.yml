@@ -2,7 +2,7 @@ name: Cartier Watch Stock Check
 
 on:
   schedule:
-    - cron: "*/15 * * * *" # 매 15분마다 실행
+    - cron: "*/1 * * * *"
   workflow_dispatch:
 
 jobs:
