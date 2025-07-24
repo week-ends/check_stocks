@@ -203,6 +203,8 @@ def scrape_cartier_watch(url: str) -> ItemInfoResponse:
 if __name__ == "__main__":
     logger.info("Cartier 시계 구매 가능 상태 확인 시작")
 
+    send_telegram_message("Cartier 시계 재고 확인 작업 시작")
+
     # 대상 URL에서 정보 스크래핑
     url = TARGET_URL
     try:
