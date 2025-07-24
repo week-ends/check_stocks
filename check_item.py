@@ -32,10 +32,9 @@ PROXIES_LIST = config.get("proxies", [])
 TELEGRAM_TOKEN = config["telegram_bot_token"]
 TELEGRAM_CHAT_ID = config["telegram_chat_id"]
 
-
 # 요청 사이 랜덤 지연 범위 (초)
-MIN_DELAY = config["min_delay"]
-MAX_DELAY = config["max_delay"]
+MIN_DELAY = float(config["min_delay"])
+MAX_DELAY = float(config["max_delay"])
 
 # 로그 파일 경로
 LOG_PATH = "logs/check_button.log"
@@ -227,7 +226,7 @@ if __name__ == "__main__":
         import traceback
 
         tb_str = traceback.format_exc()
-        err_msg = f"스크래핑 오류 발생: {e}\nTraceback:\n{tb_str}"
+        err_msg = f"스크래핑 오류 발생: {e}\n{tb_str}"
         logger.error(err_msg, exc_info=True)
         send_telegram_message(err_msg)
         sys.exit(1)
