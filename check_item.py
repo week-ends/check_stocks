@@ -12,6 +12,8 @@ import toml
 from logging.handlers import RotatingFileHandler
 from logging import FileHandler, Formatter, StreamHandler
 
+from html import escape
+
 
 class JSONFormatter(Formatter):
     def format(self, record):
@@ -137,7 +139,7 @@ def scrape_cartier_watch(url: str) -> ItemInfoResponse:
     # 백오프 및 타임아웃 설정
     MAX_RETRIES = int(config.get("max_retries", 3))
     BACKOFF_FACTOR = float(config.get("backoff_factor", 2))
-    TIMEOUT = float(config.get("timeout", 3))
+    TIMEOUT = float(config.get("timeout", 10))
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             logger.info(
@@ -226,7 +228,7 @@ if __name__ == "__main__":
         import traceback
 
         tb_str = traceback.format_exc()
-        err_msg = f"스크래핑 오류 발생: {e}\n{tb_str}"
+        err_msg = "스크래핑 오류 발생:\n\n" + escape(tb_str)[:4000]
         logger.error(err_msg, exc_info=True)
         send_telegram_message(err_msg)
         sys.exit(1)
